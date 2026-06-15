@@ -6,7 +6,7 @@ interface LoginProps {
 }
 
 export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onToggleAuth }) => {
-  const GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID || "339648349691-us6eg9lbk6k4deblpnh917tdns9dsi2.apps.googleusercontent.com").trim();
+  const GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID || "339648349691-us6eg9lbk6k4debrlpnh917tdns9dsi2.apps.googleusercontent.com").trim();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
