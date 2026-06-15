@@ -38,6 +38,7 @@ interface HistoryItem {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ userId }) => {
+  const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").trim().replace(/\/$/, "");
   // Goal Strategy states
   const [targetRole, setTargetRole] = useState('Agentic AI Developer');
   const [timelineMonths, setTimelineMonths] = useState(2);
@@ -96,7 +97,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ userId }) => {
     // Initial logs setup
     setLogs([
       `[${new Date().toLocaleTimeString()}] [System] React OS initialized. Connection active.`,
-      `[${new Date().toLocaleTimeString()}] [System] Connected to API endpoint http://127.0.0.1:8000`,
+      `[${new Date().toLocaleTimeString()}] [System] Connected to API endpoint ${API_BASE_URL}`,
       `[${new Date().toLocaleTimeString()}] [System] SQLite database loaded successfully.`,
       `[${new Date().toLocaleTimeString()}] [System] Ready for career path diagnosis.`
     ]);
@@ -119,7 +120,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ userId }) => {
 
   const fetchRoadmapAndHistory = async () => {
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/users/${userId}/roadmap`);
+      const response = await fetch(`${API_BASE_URL}/api/users/${userId}/roadmap`);
       const data = await response.json();
       
       if (response.ok && data.milestones && data.milestones.length > 0) {
@@ -133,7 +134,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ userId }) => {
         loadLocalMockData();
       }
 
-      const historyResponse = await fetch(`http://127.0.0.1:8000/api/users/${userId}/history`);
+      const historyResponse = await fetch(`${API_BASE_URL}/api/users/${userId}/history`);
       const historyData = await historyResponse.json();
       
       if (historyResponse.ok && historyData.history) {
@@ -185,7 +186,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ userId }) => {
   const handleMilestoneToggle = async (weekNumber: number, currentStatus: boolean) => {
     const newStatus = !currentStatus;
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/users/${userId}/roadmap/milestone`, {
+      const response = await fetch(`${API_BASE_URL}/api/users/${userId}/roadmap/milestone`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ week_number: weekNumber, completed: newStatus }),
@@ -272,7 +273,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ userId }) => {
       setDiagnosticSteps(prev => prev.map((s, i) => i === 3 ? { ...s, status: 'done' } : i === 4 ? { ...s, status: 'loading' } : s));
       addLog('Learning Path Agent', "Mapping week structures and formulating custom repository setup code.");
 
-      const response = await fetch('http://127.0.0.1:8000/api/diagnose', {
+      const response = await fetch(`${API_BASE_URL}/api/diagnose`, {
         method: 'POST',
         body: formData
       });

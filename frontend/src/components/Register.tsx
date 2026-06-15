@@ -16,6 +16,7 @@ export const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onLoginSu
 
   // Google Client ID
   const GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID || "339648349691-us6eg9lbk6k4debrlpnh917tdns9dsi2.apps.googleusercontent.com").trim();
+  const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").trim().replace(/\/$/, "");
 
   // OTP states
   const [otpSent, setOtpSent] = useState(false);
@@ -78,7 +79,7 @@ export const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onLoginSu
       const googleEmail = payload?.email || '';
       const googleName = payload?.name || 'Google User';
 
-      const response = await fetch('http://127.0.0.1:8000/api/auth/direct', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/direct`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -113,7 +114,7 @@ export const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onLoginSu
     setOtpFlowType(flowType);
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/auth/send-otp', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/send-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: emailToVerify }),
@@ -146,7 +147,7 @@ export const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onLoginSu
         return;
       }
 
-      const response = await fetch('http://127.0.0.1:8000/api/auth/verify-otp', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: pendingEmail, code: otpCode.trim() }),
@@ -200,7 +201,7 @@ export const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onLoginSu
     setSuccess(false);
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/auth/register', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: regName, email: regEmail, password: regPassword }),

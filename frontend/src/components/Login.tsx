@@ -7,6 +7,7 @@ interface LoginProps {
 
 export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onToggleAuth }) => {
   const GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID || "339648349691-us6eg9lbk6k4debrlpnh917tdns9dsi2.apps.googleusercontent.com").trim();
+  const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").trim().replace(/\/$/, "");
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -64,7 +65,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onToggleAuth }) =>
       const googleEmail = payload?.email || '';
       const googleName = payload?.name || 'Google User';
 
-      const response = await fetch('http://127.0.0.1:8000/api/auth/direct', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/direct`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -94,7 +95,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onToggleAuth }) =>
     setError(null);
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/auth/login', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
