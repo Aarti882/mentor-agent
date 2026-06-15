@@ -36,29 +36,41 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onToggleAuth }) =>
   useEffect(() => {
     const loadDeviceAccounts = () => {
       const savedAccounts = localStorage.getItem('mca_mentor_device_accounts');
+      let accounts: any[] = [];
       if (savedAccounts) {
         try {
-          const parsed = JSON.parse(savedAccounts);
-          setUsersList(parsed || []);
-          if (!parsed || parsed.length === 0) {
-            setShowCustomGoogle(true);
-          } else {
-            setShowCustomGoogle(false);
-          }
+          accounts = JSON.parse(savedAccounts) || [];
         } catch (e) {
           console.error("Failed to parse device accounts:", e);
-          setShowCustomGoogle(true);
         }
-      } else {
-        setUsersList([]);
+      }
+
+      // If user has typed their email in the input box, offer it as the primary direct selection
+      if (email && email.includes('@')) {
+        const namePart = email.split('@')[0];
+        const formattedName = namePart
+          .split(/[._-]/)
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+        
+        const exists = accounts.find((a: any) => a.email.toLowerCase() === email.toLowerCase());
+        if (!exists) {
+          accounts = [{ id: -1, name: formattedName || 'Google User', email: email }, ...accounts];
+        }
+      }
+
+      setUsersList(accounts);
+      if (accounts.length === 0) {
         setShowCustomGoogle(true);
+      } else {
+        setShowCustomGoogle(false);
       }
     };
 
     if (showGoogleSelector) {
       loadDeviceAccounts();
     }
-  }, [showGoogleSelector]);
+  }, [showGoogleSelector, email]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

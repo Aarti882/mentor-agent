@@ -39,29 +39,40 @@ export const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onLoginSu
   useEffect(() => {
     const loadDeviceAccounts = () => {
       const savedAccounts = localStorage.getItem('mca_mentor_device_accounts');
+      let accounts: any[] = [];
       if (savedAccounts) {
         try {
-          const parsed = JSON.parse(savedAccounts);
-          setUsersList(parsed || []);
-          if (!parsed || parsed.length === 0) {
-            setShowCustomGoogle(true);
-          } else {
-            setShowCustomGoogle(false);
-          }
+          accounts = JSON.parse(savedAccounts) || [];
         } catch (e) {
           console.error("Failed to parse device accounts:", e);
-          setShowCustomGoogle(true);
         }
-      } else {
-        setUsersList([]);
+      }
+
+      // If user has typed details in the registration form, show them as a direct selection option
+      if (email && email.includes('@')) {
+        const formattedName = name || email.split('@')[0]
+          .split(/[._-]/)
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+        
+        const exists = accounts.find((a: any) => a.email.toLowerCase() === email.toLowerCase());
+        if (!exists) {
+          accounts = [{ id: -1, name: formattedName, email: email }, ...accounts];
+        }
+      }
+
+      setUsersList(accounts);
+      if (accounts.length === 0) {
         setShowCustomGoogle(true);
+      } else {
+        setShowCustomGoogle(false);
       }
     };
 
     if (showGoogleSelector) {
       loadDeviceAccounts();
     }
-  }, [showGoogleSelector]);
+  }, [showGoogleSelector, email, name]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
