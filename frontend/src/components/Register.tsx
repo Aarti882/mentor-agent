@@ -15,7 +15,7 @@ export const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onLoginSu
   const [success, setSuccess] = useState(false);
 
   // Google Client ID
-  const GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID || "1049386348278-demo.apps.googleusercontent.com").trim();
+  const GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID || "339648349691-us6eg9lbk6k4deblpnh917tdns9dsi2.apps.googleusercontent.com").trim();
 
   // OTP states
   const [otpSent, setOtpSent] = useState(false);
