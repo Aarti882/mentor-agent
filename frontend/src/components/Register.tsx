@@ -22,52 +22,44 @@ export const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onLoginSu
   const [customGoogleName, setCustomGoogleName] = useState('');
   const [usersList, setUsersList] = useState<{ id: number; name: string; email: string }[]>([]);
 
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const response = await fetch('http://127.0.0.1:8000/api/users');
-        if (response.ok) {
-          const data = await response.json();
-          setUsersList(data);
-        } else {
-          loadMockUsers();
-        }
-      } catch (err) {
-        console.warn("Backend user list fetch failed. Loading local mock database users...");
-        loadMockUsers();
+  const saveDeviceAccount = (id: number, name: string, email: string) => {
+    try {
+      const savedAccountsRaw = localStorage.getItem('mca_mentor_device_accounts') || '[]';
+      const accounts = JSON.parse(savedAccountsRaw);
+      const exists = accounts.find((a: any) => a.email.toLowerCase() === email.toLowerCase());
+      if (!exists) {
+        accounts.push({ id, name, email });
+        localStorage.setItem('mca_mentor_device_accounts', JSON.stringify(accounts));
       }
-    };
+    } catch (e) {
+      console.error("Failed to save account to device local storage:", e);
+    }
+  };
 
-    const loadMockUsers = () => {
-      const mockUsersRaw = localStorage.getItem('mca_mentor_mock_users');
-      if (mockUsersRaw) {
+  useEffect(() => {
+    const loadDeviceAccounts = () => {
+      const savedAccounts = localStorage.getItem('mca_mentor_device_accounts');
+      if (savedAccounts) {
         try {
-          let users = JSON.parse(mockUsersRaw);
-          // Proactively sanitize stored personal emails for security & privacy
-          users = users.map((u: any) => 
-            u.email.toLowerCase() === '22aartikumari32@gmail.com' 
-              ? { ...u, name: 'Demo Student', email: 'student.demo@gmail.com' } 
-              : u
-          );
-          localStorage.setItem('mca_mentor_mock_users', JSON.stringify(users));
-          if (users && users.length > 0) {
-            setUsersList(users);
-            return;
+          const parsed = JSON.parse(savedAccounts);
+          setUsersList(parsed || []);
+          if (!parsed || parsed.length === 0) {
+            setShowCustomGoogle(true);
+          } else {
+            setShowCustomGoogle(false);
           }
         } catch (e) {
-          console.error("Failed to parse mock database users:", e);
+          console.error("Failed to parse device accounts:", e);
+          setShowCustomGoogle(true);
         }
+      } else {
+        setUsersList([]);
+        setShowCustomGoogle(true);
       }
-      const defaultUsers = [
-        { id: 1, name: 'Demo Student', email: 'student.demo@gmail.com' },
-        { id: 2, name: 'Guest Candidate', email: 'guest.candidate@gmail.com' }
-      ];
-      localStorage.setItem('mca_mentor_mock_users', JSON.stringify(defaultUsers));
-      setUsersList(defaultUsers);
     };
 
     if (showGoogleSelector) {
-      fetchUsers();
+      loadDeviceAccounts();
     }
   }, [showGoogleSelector]);
 
@@ -151,6 +143,7 @@ export const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onLoginSu
         throw new Error(data.detail || 'Direct authentication failed.');
       }
 
+      saveDeviceAccount(data.user_id, data.name, data.email);
       setSuccess(true);
       setTimeout(() => {
         onLoginSuccess(data.user_id, data.name, data.email);
@@ -159,15 +152,17 @@ export const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onLoginSu
       // Offline fallback: Demo Mode
       console.warn("Backend offline or direct auth failed. Logging in locally:", err);
       
+      const mockId = Date.now();
+      
       const mockUsersRaw = localStorage.getItem('mca_mentor_mock_users') || '[]';
       try {
         const users = JSON.parse(mockUsersRaw);
         const exists = users.find((u: any) => u.email.toLowerCase() === googleEmail.toLowerCase());
-        const mockId = exists ? exists.id : Date.now();
+        const finalId = exists ? exists.id : mockId;
         
         if (!exists) {
           users.push({
-            id: mockId,
+            id: finalId,
             name: googleName,
             email: googleEmail,
             password: 'google_oauth_fallback_secret_password_phrase'
@@ -175,14 +170,16 @@ export const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onLoginSu
           localStorage.setItem('mca_mentor_mock_users', JSON.stringify(users));
         }
         
+        saveDeviceAccount(finalId, googleName, googleEmail);
+        setSuccess(true);
+        setTimeout(() => {
+          onLoginSuccess(finalId, googleName, googleEmail);
+        }, 800);
+      } catch (e) {
+        saveDeviceAccount(mockId, googleName, googleEmail);
         setSuccess(true);
         setTimeout(() => {
           onLoginSuccess(mockId, googleName, googleEmail);
-        }, 800);
-      } catch (e) {
-        setSuccess(true);
-        setTimeout(() => {
-          onLoginSuccess(Date.now(), googleName, googleEmail);
         }, 800);
       }
     } finally {
@@ -419,7 +416,9 @@ export const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onLoginSu
               <div style={{ background: '#f3f4f6', padding: '12px', borderRadius: '8px', marginTop: '10px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                   <span style={{ fontSize: '12px', fontWeight: 700, color: '#4b5563' }}>Enter Account Info</span>
-                  <button onClick={() => setShowCustomGoogle(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: 0 }}><X size={14} /></button>
+                  {usersList.length > 0 && (
+                    <button onClick={() => setShowCustomGoogle(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: 0 }}><X size={14} /></button>
+                  )}
                 </div>
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
