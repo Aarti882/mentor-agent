@@ -1,4 +1,10 @@
 import json
+import os
+import time
+import random
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
@@ -34,11 +40,90 @@ class DirectLoginRequest(BaseModel):
     email: EmailStr
     name: str
 
+class SendOtpRequest(BaseModel):
+    email: EmailStr
+
+class VerifyOtpRequest(BaseModel):
+    email: EmailStr
+    code: str
+
 class MilestoneToggleRequest(BaseModel):
     week_number: int
     completed: bool
 
 # ----------------- AUTH ENDPOINTS -----------------
+# In-memory OTP store (email -> {code, timestamp})
+otp_store = {}
+verified_emails = {}  # In-memory store for verified email addresses (email -> timestamp)
+
+def send_email_otp(to_email: str, code: str) -> bool:
+    smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+    smtp_user = os.environ.get("SMTP_USER", "")
+    smtp_password = os.environ.get("SMTP_PASSWORD", "")
+    
+    if not smtp_user or not smtp_password:
+        print(f"[OTP] [SIMULATION] No SMTP credentials. OTP for {to_email} is {code}")
+        return False
+        
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = smtp_user
+        msg['To'] = to_email
+        msg['Subject'] = "Your Career Mentor Verification Code"
+        
+        body = f"""Hello,
+
+Your One-Time Verification Code (OTP) for Career Mentor is: {code}
+
+This code is valid for 10 minutes.
+
+Best regards,
+Career Mentor Team
+"""
+        msg.attach(MIMEText(body, 'plain'))
+        
+        server = smtplib.SMTP(smtp_host, smtp_port)
+        server.starttls()
+        server.login(smtp_user, smtp_password)
+        server.sendmail(smtp_user, to_email, msg.as_string())
+        server.quit()
+        print(f"[OTP] Real email sent successfully to {to_email}")
+        return True
+    except Exception as e:
+        print(f"[OTP] [ERROR] Failed to send real email to {to_email}: {e}")
+        return False
+
+@app.post("/api/auth/send-otp")
+def send_otp(req: SendOtpRequest):
+    code = f"{random.randint(100000, 999999)}"
+    otp_store[req.email.strip().lower()] = {
+        "code": code,
+        "timestamp": time.time()
+    }
+    sent_real = send_email_otp(req.email.strip().lower(), code)
+    return {
+        "success": True,
+        "message": "OTP sent successfully.",
+        "debug_otp": code if not sent_real else None
+    }
+
+@app.post("/api/auth/verify-otp")
+def verify_otp(req: VerifyOtpRequest):
+    email = req.email.strip().lower()
+    entry = otp_store.get(email)
+    if not entry:
+        raise HTTPException(status_code=400, detail="No verification code was sent to this email.")
+    if time.time() - entry["timestamp"] > 600:
+        del otp_store[email]
+        raise HTTPException(status_code=400, detail="Verification code has expired. Please request a new one.")
+    if entry["code"] != req.code.strip():
+        raise HTTPException(status_code=400, detail="Invalid verification code.")
+    
+    del otp_store[email]
+    verified_emails[email] = time.time()
+    return {"success": True, "message": "Email verified."}
+
 @app.get("/api/users")
 def get_users():
     try:
@@ -49,8 +134,15 @@ def get_users():
 
 @app.post("/api/auth/register", status_code=status.HTTP_201_CREATED)
 def register(req: RegisterRequest):
+    email = req.email.strip().lower()
+    v_time = verified_emails.get(email)
+    if not v_time or (time.time() - v_time > 900):
+        raise HTTPException(status_code=400, detail="Email verification required. Please verify your email first via OTP.")
+        
     try:
         user_id = db.register_user(req.name, req.email, req.password)
+        if email in verified_emails:
+            del verified_emails[email]
         return {
             "user_id": user_id,
             "name": req.name,
@@ -81,14 +173,22 @@ def login(req: LoginRequest):
 
 @app.post("/api/auth/direct")
 def direct_login(req: DirectLoginRequest):
+    email = req.email.strip().lower()
+    v_time = verified_emails.get(email)
+    if not v_time or (time.time() - v_time > 900):
+        raise HTTPException(status_code=400, detail="Email verification required. Please verify your email first via OTP.")
+        
     try:
         # Check if user exists by email
         conn = db.get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, name, email, target_role, timeline_months FROM users WHERE email = ?", (req.email.strip().lower(),))
+        cursor.execute("SELECT id, name, email, target_role, timeline_months FROM users WHERE email = ?", (email,))
         row = cursor.fetchone()
         conn.close()
         
+        if email in verified_emails:
+            del verified_emails[email]
+            
         if row:
             user = dict(row)
             return {

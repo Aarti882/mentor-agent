@@ -25,10 +25,22 @@ def test_api_server():
     
     try:
         # 1. Test User Registration
-        print("1. Testing Registration Endpoint (/api/auth/register)...")
+        print("1. Testing Registration Endpoint (/api/auth/register) with OTP...")
+        test_email = "test_integration@mca.edu"
+        
+        # Request OTP
+        send_otp_res = requests.post(f"{base_url}/auth/send-otp", json={"email": test_email})
+        assert send_otp_res.status_code == 200, "Send OTP failed"
+        debug_code = send_otp_res.json()["debug_otp"]
+        assert debug_code is not None, "Debug OTP missing in simulation mode"
+        
+        # Verify OTP
+        verify_res = requests.post(f"{base_url}/auth/verify-otp", json={"email": test_email, "code": debug_code})
+        assert verify_res.status_code == 200, "Verify OTP failed"
+        
         reg_payload = {
             "name": "Integration Test Candidate",
-            "email": "test_integration@mca.edu",
+            "email": test_email,
             "password": "securepassword123"
         }
         
@@ -75,10 +87,22 @@ def test_api_server():
         assert history_res.status_code == 200, "History fetch failed"
 
         # 5. Test Direct OAuth Direct Login
-        print("5. Testing Direct Simulated OAuth Endpoint (/api/auth/direct)...")
+        print("5. Testing Direct Simulated OAuth Endpoint (/api/auth/direct) with OTP...")
+        direct_email = "test_direct_oauth@mca.edu"
+        
+        # Request OTP
+        send_otp_res2 = requests.post(f"{base_url}/auth/send-otp", json={"email": direct_email})
+        assert send_otp_res2.status_code == 200, "Send OTP failed for direct auth"
+        debug_code2 = send_otp_res2.json()["debug_otp"]
+        assert debug_code2 is not None, "Debug OTP missing for direct auth"
+        
+        # Verify OTP
+        verify_res2 = requests.post(f"{base_url}/auth/verify-otp", json={"email": direct_email, "code": debug_code2})
+        assert verify_res2.status_code == 200, "Verify OTP failed for direct auth"
+        
         direct_payload = {
             "name": "Direct Test Candidate",
-            "email": "test_direct_oauth@mca.edu"
+            "email": direct_email
         }
         direct_res = requests.post(f"{base_url}/auth/direct", json=direct_payload)
         print("Direct auth response code:", direct_res.status_code)
