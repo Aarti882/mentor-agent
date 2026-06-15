@@ -39,6 +39,7 @@ class LoginRequest(BaseModel):
 class DirectLoginRequest(BaseModel):
     email: EmailStr
     name: str
+    credential: Optional[str] = None
 
 class SendOtpRequest(BaseModel):
     email: EmailStr
@@ -171,12 +172,40 @@ def login(req: LoginRequest):
         "message": "Login successful."
     }
 
+def verify_google_token(token: str) -> dict:
+    import urllib.request
+    import json
+    try:
+        url = f"https://oauth2.googleapis.com/tokeninfo?id_token={token}"
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode())
+            if "error" in data:
+                print(f"[Google Auth] Tokeninfo error: {data.get('error_description', 'unknown error')}")
+                return None
+            return data
+    except Exception as e:
+        print(f"[Google Auth] Token verification failed: {e}")
+        return None
+
 @app.post("/api/auth/direct")
 def direct_login(req: DirectLoginRequest):
-    email = req.email.strip().lower()
-    v_time = verified_emails.get(email)
-    if not v_time or (time.time() - v_time > 900):
-        raise HTTPException(status_code=400, detail="Email verification required. Please verify your email first via OTP.")
+    # Determine user details either from Google ID token or fallback request payload
+    if req.credential:
+        payload = verify_google_token(req.credential)
+        if not payload:
+            raise HTTPException(status_code=400, detail="Invalid Google authentication credential.")
+        email = payload.get("email", "").strip().lower()
+        name = payload.get("name", "").strip() or req.name.strip()
+        if not email:
+            raise HTTPException(status_code=400, detail="Google authentication did not provide an email address.")
+    else:
+        # Fallback to OTP-verified flow (for offline tests/pickers)
+        email = req.email.strip().lower()
+        name = req.name.strip()
+        v_time = verified_emails.get(email)
+        if not v_time or (time.time() - v_time > 900):
+            raise HTTPException(status_code=400, detail="Email verification required. Please verify your email first via OTP.")
         
     try:
         # Check if user exists by email
@@ -186,7 +215,7 @@ def direct_login(req: DirectLoginRequest):
         row = cursor.fetchone()
         conn.close()
         
-        if email in verified_emails:
+        if not req.credential and email in verified_emails:
             del verified_emails[email]
             
         if row:
@@ -201,11 +230,11 @@ def direct_login(req: DirectLoginRequest):
             }
         else:
             # User doesn't exist, register them dynamically with google fallback secret password
-            user_id = db.register_user(req.name, req.email, "google_oauth_fallback_secret_password_phrase")
+            user_id = db.register_user(name, email, "google_oauth_fallback_secret_password_phrase")
             return {
                 "user_id": user_id,
-                "name": req.name,
-                "email": req.email,
+                "name": name,
+                "email": email,
                 "target_role": None,
                 "timeline_months": None,
                 "message": "Direct login registered and logged in successfully."

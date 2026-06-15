@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { X, Mail, User } from 'lucide-react';
 
 interface RegisterProps {
   onRegisterSuccess: () => void;
@@ -15,12 +14,8 @@ export const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onLoginSu
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  // Google Selector Modal states
-  const [showGoogleSelector, setShowGoogleSelector] = useState(false);
-  const [showCustomGoogle, setShowCustomGoogle] = useState(false);
-  const [customGoogleEmail, setCustomGoogleEmail] = useState('');
-  const [customGoogleName, setCustomGoogleName] = useState('');
-  const [usersList, setUsersList] = useState<{ id: number; name: string; email: string }[]>([]);
+  // Google Client ID
+  const GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID || "1049386348278-demo.apps.googleusercontent.com").trim();
 
   // OTP states
   const [otpSent, setOtpSent] = useState(false);
@@ -31,6 +26,85 @@ export const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onLoginSu
   const [pendingEmail, setPendingEmail] = useState('');
   const [pendingName, setPendingName] = useState('');
   const [pendingPassword, setPendingPassword] = useState('');
+
+  useEffect(() => {
+    const initGoogleGSI = () => {
+      const google = (window as any).google;
+      if (google) {
+        google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: (response: any) => {
+            handleGoogleCredentialResponse(response.credential);
+          },
+          cancel_on_tap_outside: false
+        });
+
+        google.accounts.id.renderButton(
+          document.getElementById("google-signin-button"),
+          { theme: "outline", size: "large", width: 320, text: "continue_with", shape: "rectangular" }
+        );
+
+        google.accounts.id.prompt();
+      }
+    };
+
+    const scriptExists = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+    if (!scriptExists) {
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      script.onload = initGoogleGSI;
+      document.head.appendChild(script);
+    } else {
+      const timer = setTimeout(initGoogleGSI, 500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  const parseJwt = (token: string) => {
+    try {
+      return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const handleGoogleCredentialResponse = async (credential: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const payload = parseJwt(credential);
+      const googleEmail = payload?.email || '';
+      const googleName = payload?.name || 'Google User';
+
+      const response = await fetch('http://127.0.0.1:8000/api/auth/direct', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: googleName,
+          email: googleEmail,
+          credential: credential
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || 'Google sign-in authentication failed.');
+      }
+
+      saveDeviceAccount(data.user_id, data.name, data.email);
+      setSuccess(true);
+      setTimeout(() => {
+        onLoginSuccess(data.user_id, data.name, data.email);
+      }, 800);
+    } catch (err: any) {
+      console.error("Google sign-in failed:", err);
+      setError(err.message || "Failed to authenticate using Google Sign-In.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleRequestOtp = async (emailToVerify: string, flowType: 'normal' | 'google') => {
     setLoading(true);
@@ -66,11 +140,7 @@ export const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onLoginSu
     setError(null);
     try {
       if (debugOtpHint === "123456" && otpCode.trim() === "123456") {
-        if (otpFlowType === 'normal') {
-          await submitRegistration(pendingName, pendingEmail, pendingPassword);
-        } else {
-          await handleGoogleLogin(pendingEmail, pendingName);
-        }
+        await submitRegistration(pendingName, pendingEmail, pendingPassword);
         setOtpSent(false);
         setOtpCode('');
         return;
@@ -87,11 +157,7 @@ export const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onLoginSu
         throw new Error(data.detail || 'Verification code check failed.');
       }
 
-      if (otpFlowType === 'normal') {
-        await submitRegistration(pendingName, pendingEmail, pendingPassword);
-      } else {
-        await handleGoogleLogin(pendingEmail, pendingName);
-      }
+      await submitRegistration(pendingName, pendingEmail, pendingPassword);
       setOtpSent(false);
       setOtpCode('');
     } catch (err: any) {
@@ -114,44 +180,6 @@ export const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onLoginSu
       console.error("Failed to save account to device local storage:", e);
     }
   };
-
-  useEffect(() => {
-    const loadDeviceAccounts = () => {
-      const savedAccounts = localStorage.getItem('mca_mentor_device_accounts');
-      let accounts: any[] = [];
-      if (savedAccounts) {
-        try {
-          accounts = JSON.parse(savedAccounts) || [];
-        } catch (e) {
-          console.error("Failed to parse device accounts:", e);
-        }
-      }
-
-      // If user has typed details in the registration form, show them as a direct selection option
-      if (email && email.includes('@')) {
-        const formattedName = name || email.split('@')[0]
-          .split(/[._-]/)
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(' ');
-        
-        const exists = accounts.find((a: any) => a.email.toLowerCase() === email.toLowerCase());
-        if (!exists) {
-          accounts = [{ id: -1, name: formattedName, email: email }, ...accounts];
-        }
-      }
-
-      setUsersList(accounts);
-      if (accounts.length === 0) {
-        setShowCustomGoogle(true);
-      } else {
-        setShowCustomGoogle(false);
-      }
-    };
-
-    if (showGoogleSelector) {
-      loadDeviceAccounts();
-    }
-  }, [showGoogleSelector, email, name]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -225,69 +253,7 @@ export const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onLoginSu
     }
   };
 
-  const handleGoogleLogin = async (googleEmail: string, googleName: string) => {
-    setLoading(true);
-    setShowGoogleSelector(false);
-    setError(null);
-    try {
-      // Attempt direct simulated Google OAuth login
-      const response = await fetch('http://127.0.0.1:8000/api/auth/direct', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: googleName,
-          email: googleEmail
-        }),
-      });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || 'Direct authentication failed.');
-      }
-
-      saveDeviceAccount(data.user_id, data.name, data.email);
-      setSuccess(true);
-      setTimeout(() => {
-        onLoginSuccess(data.user_id, data.name, data.email);
-      }, 800);
-    } catch (err: any) {
-      // Offline fallback: Demo Mode
-      console.warn("Backend offline or direct auth failed. Logging in locally:", err);
-      
-      const mockId = Date.now();
-      
-      const mockUsersRaw = localStorage.getItem('mca_mentor_mock_users') || '[]';
-      try {
-        const users = JSON.parse(mockUsersRaw);
-        const exists = users.find((u: any) => u.email.toLowerCase() === googleEmail.toLowerCase());
-        const finalId = exists ? exists.id : mockId;
-        
-        if (!exists) {
-          users.push({
-            id: finalId,
-            name: googleName,
-            email: googleEmail,
-            password: 'google_oauth_fallback_secret_password_phrase'
-          });
-          localStorage.setItem('mca_mentor_mock_users', JSON.stringify(users));
-        }
-        
-        saveDeviceAccount(finalId, googleName, googleEmail);
-        setSuccess(true);
-        setTimeout(() => {
-          onLoginSuccess(finalId, googleName, googleEmail);
-        }, 800);
-      } catch (e) {
-        saveDeviceAccount(mockId, googleName, googleEmail);
-        setSuccess(true);
-        setTimeout(() => {
-          onLoginSuccess(mockId, googleName, googleEmail);
-        }, 800);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="auth-container">
@@ -440,36 +406,16 @@ export const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onLoginSu
               <hr style={{ flex: 1, borderColor: 'rgba(255,255,255,0.08)' }} />
             </div>
 
-            <button 
-              type="button" 
-              onClick={() => setShowGoogleSelector(true)}
-              disabled={loading || success}
-              style={{
-                width: '100%',
-                padding: '12px 20px',
-                borderRadius: '8px',
-                border: '1px solid rgba(255,255,255,0.15)',
-                background: '#ffffff',
-                color: '#0f172a',
-                fontSize: '15px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
+            <div 
+              id="google-signin-button" 
+              style={{ 
+                width: '100%', 
+                minHeight: '44px',
+                display: 'flex', 
                 justifyContent: 'center',
-                gap: '10px',
-                boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
-                opacity: (loading || success) ? 0.6 : 1
+                marginBottom: '15px'
               }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v3.927h6.6c-.29 1.5-.143 2.5-1.5 3.4l2.4 1.86a11.9 11.9 0 0 0 3.745-7.117Z" />
-                <path fill="#34A853" d="M12 24c3.24 0 5.97-1.08 7.96-2.913l-3.86-3a7.5 7.5 0 0 1-11.45-3.953l-4 3.093A12 12 0 0 0 12 24Z" />
-                <path fill="#FBBC05" d="M4.65 14.133a7.16 7.16 0 0 1 0-4.266l-4-3.093a11.98 11.98 0 0 0 0 10.452l4-3.093Z" />
-                <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.43-3.43A11.93 11.93 0 0 0 12 0 12 12 0 0 0 .65 6.774l4 3.093a7.43 7.43 0 0 1 7.35-5.117Z" />
-              </svg>
-              Continue with Google
-            </button>
+            />
           </>
         )}
 
@@ -490,193 +436,6 @@ export const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onLoginSu
           </button>
         </div>
       </div>
-
-      {/* ----------------- GOOGLE IDENTITY SERVICES MODAL POPUP ----------------- */}
-      {showGoogleSelector && (
-        <div className="modal-overlay" style={{ background: 'rgba(0,0,0,0.85)' }} onClick={() => setShowGoogleSelector(false)}>
-          <div className="modal-content" style={{ maxWidth: '380px', padding: '25px', background: '#ffffff', color: '#1f2937', border: 'none' }} onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" style={{ color: '#94a3b8', top: '15px', right: '15px' }} onClick={() => setShowGoogleSelector(false)}>
-              <X size={20} />
-            </button>
-            
-            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-              <svg width="32" height="32" viewBox="0 0 24 24" style={{ marginBottom: '10px' }}>
-                <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v3.927h6.6c-.29 1.5-.143 2.5-1.5 3.4l2.4 1.86a11.9 11.9 0 0 0 3.745-7.117Z" />
-                <path fill="#34A853" d="M12 24c3.24 0 5.97-1.08 7.96-2.913l-3.86-3a7.5 7.5 0 0 1-11.45-3.953l-4 3.093A12 12 0 0 0 12 24Z" />
-                <path fill="#FBBC05" d="M4.65 14.133a7.16 7.16 0 0 1 0-4.266l-4-3.093a11.98 11.98 0 0 0 0 10.452l4-3.093Z" />
-                <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.43-3.43A11.93 11.93 0 0 0 12 0 12 12 0 0 0 .65 6.774l4 3.093a7.43 7.43 0 0 1 7.35-5.117Z" />
-              </svg>
-              <h3 style={{ margin: '0 0 5px 0', fontSize: '18px', color: '#111827', fontWeight: 700 }}>
-                {otpSent ? "Verify your email" : "Choose an account"}
-              </h3>
-              <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>
-                {otpSent ? "Confirm code to register with Career Mentor" : "to continue to Career Mentor"}
-              </p>
-            </div>
-
-            {otpSent ? (
-              // ----------------- OTP VERIFICATION FORM -----------------
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <p style={{ fontSize: '13px', color: '#4b5563', margin: 0, textAlign: 'center' }}>
-                  We've sent a 6-digit code to <strong>{pendingEmail}</strong>. Please check your inbox.
-                </p>
-                
-                <input 
-                  type="text" 
-                  maxLength={6}
-                  placeholder="Enter 6-Digit OTP" 
-                  value={otpCode}
-                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                  style={{ width: '100%', padding: '10px', textAlign: 'center', fontSize: '18px', letterSpacing: '4px', fontWeight: 'bold', borderRadius: '6px', border: '1px solid #d1d5db', boxSizing: 'border-box' }}
-                />
-
-                {debugOtpHint && (
-                  <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1e40af', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', textAlign: 'center' }}>
-                    💡 <strong>Demo Code:</strong> Enter {debugOtpHint} to verify.
-                  </div>
-                )}
-
-                <button 
-                  type="button"
-                  onClick={handleVerifyOtpAndSubmit}
-                  disabled={verificationLoading || otpCode.length < 6}
-                  style={{ width: '100%', padding: '10px', background: '#111827', color: '#fff', fontSize: '14px', fontWeight: 'bold', border: 'none', borderRadius: '6px', cursor: 'pointer', opacity: (verificationLoading || otpCode.length < 6) ? 0.6 : 1 }}
-                >
-                  {verificationLoading ? 'Verifying Code...' : 'Verify & Log In'}
-                </button>
-
-                <button 
-                  type="button"
-                  onClick={() => { setOtpSent(false); setOtpCode(''); }}
-                  style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline' }}
-                >
-                  Go Back
-                </button>
-              </div>
-            ) : (
-              // ----------------- STANDARD DIRECT / PICKER VIEW -----------------
-              <>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '250px', overflowY: 'auto', marginBottom: '15px' }}>
-                  {usersList.map((usr) => {
-                    const initial = usr.name ? usr.name.charAt(0).toUpperCase() : '?';
-                    const colors = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#14b8a6'];
-                    const avatarBg = colors[usr.name.length % colors.length] || '#8b5cf6';
-                    
-                    return (
-                      <button 
-                        key={usr.id === -1 ? `temp-${usr.email}` : usr.id}
-                        type="button"
-                        onClick={() => {
-                          setPendingEmail(usr.email);
-                          setPendingName(usr.name);
-                          handleRequestOtp(usr.email, 'google');
-                        }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '12px',
-                          width: '100%',
-                          padding: '12px',
-                          background: '#f9fafb',
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
-                          textAlign: 'left'
-                        }}
-                      >
-                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: avatarBg, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-                          {initial}
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: 600, color: '#111827', fontSize: '13px' }}>{usr.name}</div>
-                          <div style={{ color: '#6b7280', fontSize: '11px' }}>{usr.email}</div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                  {usersList.length === 0 && (
-                    <p style={{ textAlign: 'center', fontSize: '13px', color: '#6b7280', margin: '20px 0' }}>
-                      No accounts registered yet.
-                    </p>
-                  )}
-                </div>
-
-                {/* Custom Google Account option toggle */}
-                {!showCustomGoogle ? (
-                  <button 
-                    type="button"
-                    onClick={() => setShowCustomGoogle(true)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      width: '100%',
-                      padding: '10px',
-                      background: 'transparent',
-                      border: '1px dashed #d1d5db',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      color: '#4b5563'
-                    }}
-                  >
-                    Use another account
-                  </button>
-                ) : (
-                  <div style={{ background: '#f3f4f6', padding: '12px', borderRadius: '8px', marginTop: '10px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#4b5563' }}>Enter Account Info</span>
-                      {usersList.length > 0 && (
-                        <button type="button" onClick={() => setShowCustomGoogle(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: 0 }}><X size={14} /></button>
-                      )}
-                    </div>
-                    
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <div style={{ position: 'relative' }}>
-                        <User size={12} style={{ position: 'absolute', left: '8px', top: '10px', color: '#9ca3af' }} />
-                        <input 
-                          type="text" 
-                          placeholder="Google Name" 
-                          value={customGoogleName}
-                          onChange={(e) => setCustomGoogleName(e.target.value)}
-                          style={{ width: '100%', padding: '6px 8px 6px 26px', fontSize: '12px', borderRadius: '4px', border: '1px solid #d1d5db', boxSizing: 'border-box' }}
-                        />
-                      </div>
-                      <div style={{ position: 'relative' }}>
-                        <Mail size={12} style={{ position: 'absolute', left: '8px', top: '10px', color: '#9ca3af' }} />
-                        <input 
-                          type="email" 
-                          placeholder="Google Email" 
-                          value={customGoogleEmail}
-                          onChange={(e) => setCustomGoogleEmail(e.target.value)}
-                          style={{ width: '100%', padding: '6px 8px 6px 26px', fontSize: '12px', borderRadius: '4px', border: '1px solid #d1d5db', boxSizing: 'border-box' }}
-                        />
-                      </div>
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          if (customGoogleEmail && customGoogleName) {
-                            setPendingEmail(customGoogleEmail);
-                            setPendingName(customGoogleName);
-                            handleRequestOtp(customGoogleEmail, 'google');
-                          } else {
-                            alert("Please provide both name and email.");
-                          }
-                        }}
-                        style={{ width: '100%', padding: '6px', background: '#111827', color: '#fff', fontSize: '12px', fontWeight: 'bold', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                      >
-                        Confirm & Sign In
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 };
