@@ -255,8 +255,8 @@ api_key = st.sidebar.text_input(
     value=os.environ.get("GEMINI_API_KEY", "")
 )
 
-user_name = st.sidebar.text_input("Student Name", "Aarti Kumari")
-user_email = st.sidebar.text_input("University Email ID", "aarti.kumari.mca@gmail.com")
+user_name = st.sidebar.text_input("Student Name", "Demo Student")
+user_email = st.sidebar.text_input("University Email ID", "student@example.com")
 
 target_role = st.sidebar.selectbox(
     "Target Career Track",

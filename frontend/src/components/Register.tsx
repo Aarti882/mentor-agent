@@ -42,7 +42,14 @@ export const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onLoginSu
       const mockUsersRaw = localStorage.getItem('mca_mentor_mock_users');
       if (mockUsersRaw) {
         try {
-          const users = JSON.parse(mockUsersRaw);
+          let users = JSON.parse(mockUsersRaw);
+          // Proactively sanitize stored personal emails for security & privacy
+          users = users.map((u: any) => 
+            u.email.toLowerCase() === '22aartikumari32@gmail.com' 
+              ? { ...u, name: 'Demo Student', email: 'student.demo@gmail.com' } 
+              : u
+          );
+          localStorage.setItem('mca_mentor_mock_users', JSON.stringify(users));
           if (users && users.length > 0) {
             setUsersList(users);
             return;
@@ -52,7 +59,7 @@ export const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onLoginSu
         }
       }
       const defaultUsers = [
-        { id: 1, name: 'Aarti kumari', email: '22aartikumari32@gmail.com' },
+        { id: 1, name: 'Demo Student', email: 'student.demo@gmail.com' },
         { id: 2, name: 'Guest Candidate', email: 'guest.candidate@gmail.com' }
       ];
       localStorage.setItem('mca_mentor_mock_users', JSON.stringify(defaultUsers));
@@ -234,7 +241,7 @@ export const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onLoginSu
               type="text"
               id="name"
               className="form-control"
-              placeholder="e.g. Aarti Kumari"
+              placeholder="e.g. Demo Student"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required

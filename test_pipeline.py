@@ -68,8 +68,8 @@ def test_predictive_engine():
 def test_evaluator_and_chroma():
     print("Testing Profile Evaluator & ChromaDB vector index...")
     sample_resume = """
-    Aarti Kumari
-    Email: aarti.kumari@gmail.com | Phone: +91-9999999999
+    Demo Student
+    Email: student.demo@gmail.com | Phone: +91-0000000000
     
     Education:
     Master of Computer Applications (MCA), 2026
@@ -109,13 +109,13 @@ def test_market_research_and_learning_path():
 def test_supervisor_pipeline():
     print("Testing complete Supervisor multi-agent LangGraph workflow...")
     sample_resume = """
-    Aarti Kumari
+    Demo Student
     MCA student. Skills: Python, Pandas, SQLite, Power BI, Git. Completed 2 projects.
     """
     
     inputs = {
-        "user_name": "Aarti Kumari",
-        "user_email": "aarti@mca.edu",
+        "user_name": "Demo Student",
+        "user_email": "student@mca.edu",
         "target_role": "Data Analyst",
         "timeline_months": 1,
         "resume_text": sample_resume,
