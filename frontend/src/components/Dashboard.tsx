@@ -118,20 +118,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ userId }) => {
     setLogs(prev => [...prev, `[${timestamp}] [${agent}] ${message}`]);
   };
 
-  const fetchRoadmapAndHistory = async () => {
+  const fetchRoadmapAndHistory = async (loadActiveRoadmap = false) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/users/${userId}/roadmap`);
-      const data = await response.json();
-      
-      if (response.ok && data.milestones && data.milestones.length > 0) {
-        setRoadmap(data.milestones);
-        setProjects(data.projects || []);
-        setResources(data.learning_resources || []);
-        setDiagnoseRan(true);
-        addLog('System', `Successfully fetched and loaded saved roadmap milestones (${data.milestones.length} weeks).`);
-      } else {
-        // Fallback check if DB returned empty but we have local mock data
-        loadLocalMockData();
+      if (loadActiveRoadmap) {
+        const response = await fetch(`${API_BASE_URL}/api/users/${userId}/roadmap`);
+        const data = await response.json();
+        
+        if (response.ok && data.milestones && data.milestones.length > 0) {
+          setRoadmap(data.milestones);
+          setProjects(data.projects || []);
+          setResources(data.learning_resources || []);
+          setDiagnoseRan(true);
+          addLog('System', `Successfully fetched and loaded saved roadmap milestones (${data.milestones.length} weeks).`);
+        } else {
+          // Fallback check if DB returned empty but we have local mock data
+          loadLocalMockData();
+        }
       }
 
       const historyResponse = await fetch(`${API_BASE_URL}/api/users/${userId}/history`);
@@ -140,7 +142,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ userId }) => {
       if (historyResponse.ok && historyData.history) {
         setHistory(historyData.history);
         
-        if (historyData.history.length > 0) {
+        if (loadActiveRoadmap && historyData.history.length > 0) {
           const lastRun = historyData.history[historyData.history.length - 1];
           setPredictiveScore(lastRun.callback_probability);
           setSkillMatchScore(lastRun.skill_match_score);
@@ -148,8 +150,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ userId }) => {
         }
       }
     } catch (error) {
-      console.warn("Failed to load historical profile state from backend. Checking local simulation state...", error);
-      loadLocalMockData();
+      console.warn("Failed to load historical profile state from backend.", error);
+      if (loadActiveRoadmap) {
+        loadLocalMockData();
+      }
     }
   };
 
@@ -671,6 +675,38 @@ export const Dashboard: React.FC<DashboardProps> = ({ userId }) => {
               <Play size={18} />
               {loading ? "Analyzing..." : "Run AI Diagnostics"}
             </button>
+
+            {!loading && history.length > 0 && (
+              <button 
+                onClick={() => fetchRoadmapAndHistory(true)} 
+                className="btn-secondary" 
+                style={{ 
+                  width: 'auto', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px', 
+                  padding: '12px 20px',
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  color: '#cbd5e1',
+                  fontWeight: 600,
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                  e.currentTarget.style.color = '#fff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                  e.currentTarget.style.color = '#cbd5e1';
+                }}
+              >
+                <History size={18} />
+                Load Last Run
+              </button>
+            )}
           </div>
         </div>
 
