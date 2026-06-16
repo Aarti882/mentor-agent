@@ -500,6 +500,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ userId }) => {
               className="form-control"
               placeholder="Search or type any role..."
               value={targetRole}
+              autoComplete="off"
               onChange={(e) => {
                 setTargetRole(e.target.value);
                 setShowSuggestions(true);
